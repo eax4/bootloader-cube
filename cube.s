@@ -79,7 +79,7 @@ fld dword [zero]
 fcomip st0, st2
 jc skip2
 mov al, 0x03
-xor cx, 1 ; cx is a flag for the second face, if both faces are culled or none of them are culled, no need to swap x and z's sign bits.
+xor cx, 1 ; cx is a flag for the second face, if both faces or none are culled, swap x and z's sign bits.
 skip2:
 mov ah, 0x04 ; check the first face's rotation for backface culling
 fld dword [zero]
