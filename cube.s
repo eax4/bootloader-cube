@@ -248,7 +248,7 @@ sub dx, 1
 cmp dx, -cubescale
 jge yloop
 fcompp ; clear up fpu stack
-mov ax, 0xA000 ; set es to vga memory, moved here from stosw to allow for an instruction alignment optimization
+mov ax, 0xA000 ; set es to vga memory
 mov es, ax
 fcompp ; clear up fpu stack
 jmp frame
