@@ -2,7 +2,6 @@ bits 16
 org 0x7c00
 
 start:
-xchg bx, bx
 xor ah, ah
 mov al, 13h
 int 10h ; setup 320 x 200 VGA
@@ -44,7 +43,8 @@ mov es, ax ; set VRAM base address
 mov dx, cubescale ; y
 mov bx, -cubescale ; x
 
-db 0x0F, 0x1F, 0x00 ; NOP for instruction alignment
+db 0x0F, 0x1F, 0x40, 0x00 ; Long NOP for instruction alignment
+db 0x90
 frame:
 mov cx, 320*200
 xor si, si
