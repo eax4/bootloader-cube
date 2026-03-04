@@ -15,7 +15,7 @@ mov bp, sp
 
 
 fld dword[zero] ; initial 0 push, doesn't matter if integer or float
-sub sp, 32 ; 8 temporary spaces for variables:
+sub sp, 36 ; 9 temporary spaces for variables:
 ; bp-4 : temp storage for x, y, z coordinates and perspective projection results
 ; bp-8 : Computed Z-coordinate
 ; bp-12 : Computed X-coordinate
@@ -24,13 +24,18 @@ sub sp, 32 ; 8 temporary spaces for variables:
 ; bp-24 : integer cubescale*factor+z_offset converted to float to move the cube away from the camera
 ; bp-28 : integer cubescale converted to float, avoiding int to float conversion on both cases.
 ; bp-32 : yinc
+; bp-36 : culling threshold
 
 mov dword [bp-24], cubescale*factor+z_offset
 mov dword [bp-28], cubescale
 fild word [bp-24]
-fstp dword [bp-24]
+fst dword [bp-24]
 fild word [bp-28]
-fstp dword [bp-28]
+fst dword [bp-28]
+fdivr st1, st0 ; cosA of right triangle ABC where AC = cube center - focus point, AB = cube center - rotated z values. Get sin90-A for the z-check
+fmulp st1, st0
+fchs ; get sin90-A (-cosA)
+fstp dword [bp-36]
 fld dword [yinc]
 fstp dword [bp-32]
 
@@ -40,11 +45,8 @@ mov ax, 0xA000
 mov es, ax ; set VRAM base address
 
 
-mov dx, cubescale ; y
-mov bx, -cubescale ; x
 
-db 0x0F, 0x1F, 0x40, 0x00 ; Long NOP for instruction alignment
-db 0x90
+db 0x66, 0x90
 frame:
 mov cx, 320*200
 xor si, si
@@ -55,7 +57,7 @@ xor di, di
 mov ax, 0x1000
 mov es, ax
 xor ax, ax
-mov dx, cubescale ; reset y back to cubescal e
+mov dx, cubescale ; reset y back to cubescale
 
 fadd dword [bp-32] ; add 0.05 to st0, which is the rotation angle in radians
 fld st0 ; copy to avoid deletion of the rotation angle by fsincos
@@ -74,25 +76,45 @@ fmul st1, st0
 fmulp st2, st0
 ; pre-compute zcos and zsin
 ; FPU stack: zcosa zsina cosa sina rotationangle
-mov al, 0x01 ; check the second face's rotation for backface culling
-fld dword [zero]
-fcomip st0, st2
-jc skip2
-mov al, 0x03
-xor cx, 1 ; cx is a flag for the second face, if both faces or none are culled, swap x and z's sign bits.
-skip2:
-mov ah, 0x04 ; check the first face's rotation for backface culling
-fld dword [zero]
-fcomip st0, st1
-jnc skip1
-mov ah, 0x05
-xor cx, 1
-fchs
-fxch st1
-fchs
-fxch st1
-skip1:
+mov ax, 0x0403
 
+fld dword [bp-36] ; start backface culling and face switching
+
+fcomi st0,st2
+jnc skipsecface
+fchs
+fcomi st0, st2
+jnc donotrendersecond
+mov al, 0x01
+xor ch, 1
+jmp skipsecface
+donotrendersecond:
+or cl, 1
+skipsecface:
+
+fabs
+fchs
+
+fcomi st0, st1 ; -20 - + 25
+jnc skip
+fchs
+fcomi st0, st1 ; 20 - +25
+jnc donotrender
+mov ah, 0x05
+fstp st0
+fchs
+fxch st1
+fchs
+fxch st1
+xor ch, 1
+jmp skip2
+donotrender:
+xor si, si
+skip:
+fstp st0
+skip2:
+
+db 0x0F, 0x1F, 0x00 ; long nop
 yloop:
 mov word [bp-4], dx ; move Y to temp storage
 mov bx, -cubescale ; reset X value back to -cubescale, once it hits +cubescale(the limit)
@@ -157,14 +179,13 @@ fld dword [bp-12] ; load saved x value (xcosa + zsina)
 add di, 100*320+160 ; middle of the screen
 add di, word [bp-4] ; round(x*50/z)
 
-test cx, cx ; check if one, both, or no faces should be culled
-; fpu stack : xcos + zsin || -xsin + zcos zcos zsin
-jnz skipl
+test ch, ch
+jz skipsecfac
 fchs
 fxch st1
 fchs
 fxch st1
-skipl:
+skipsecfac:
 
 ; do the z-offset in the background for the second face(fpu stack is x z, but here x is treated as z and vice versa due to it being rotated 90 degrees in the Y axis)
 fadd dword [bp-24]
@@ -174,7 +195,10 @@ fchs
 ; -z because of -xsin90 x
 
 mov word [bp-4], dx ; load Y for later use
+test si,  si
+jz skipfirst
 mov byte [ds:di], ah ; plot first face's pixel
+skipfirst:
 
 
 fild word [bp-4]
@@ -212,7 +236,10 @@ fdivrp st1,st0
 
 mov dword [bp-4], cubescale ; initial z value with its sign bit changed due to -zsin90, this is the Y value due to rotation in X axis
 
+test cl, cl
+jnz skipsec
 mov byte [ds:di], al ; plot second face
+skipsec:
 
 fild word [bp-4] ; y 1/z
 
