@@ -34,7 +34,7 @@ fild word [bp-28]
 fst dword [bp-28]
 fdivr st1, st0 ; cosA of right triangle ABC where AC = cube center - focus point, AB = cube center - rotated z values. Get sin90-A for the z-check
 fmulp st1, st0
-fchs ; get sin90-A (-cosA)
+fchs 
 fstp dword [bp-36]
 fld dword [yinc]
 fstp dword [bp-32]
